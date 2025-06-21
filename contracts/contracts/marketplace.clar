@@ -11,11 +11,15 @@
 (define-constant err-invalid-price (err u105))
 (define-constant err-cannot-buy-own-listing (err u106))
 (define-constant err-invalid-fee-rate (err u107))
+(define-constant err-dataset-not-found (err u108))
+(define-constant err-already-purchased (err u109))
+(define-constant err-contract-call-failed (err u110))
 
 ;; Data variables
 (define-data-var last-listing-id uint u0)
 (define-data-var platform-fee-rate uint u250) ;; 2.5% in basis points
 (define-data-var platform-treasury principal tx-sender)
+(define-data-var dataset-registry-contract principal tx-sender) ;; Will be set to actual contract address
 
 ;; Listing data structure
 (define-map listings uint {
@@ -56,6 +60,13 @@
 
 (define-data-var last-sale-id uint u0)
 
+;; Dataset purchase tracking
+(define-map dataset-purchases {dataset-id: uint, buyer: principal} {
+  purchase-price: uint,
+  purchased-at: uint,
+  royalty-paid: uint
+})
+
 ;; Private functions
 (define-private (next-listing-id)
   (begin
@@ -74,6 +85,9 @@
 
 (define-private (calculate-platform-fee (price uint))
   (/ (* price (var-get platform-fee-rate)) u10000))
+
+(define-private (calculate-royalty (price uint) (royalty-rate uint))
+  (/ (* price royalty-rate) u10000))
 
 ;; Public functions
 
@@ -217,6 +231,51 @@
     
     (ok sale-id)))
 
+;; Dataset marketplace functions
+
+;; Purchase dataset with automatic royalty distribution
+(define-public (purchase-dataset (dataset-id uint))
+  (let ((dataset-registry (var-get dataset-registry-contract)))
+    ;; Get dataset information from registry contract
+    (match (contract-call? dataset-registry get-dataset dataset-id)
+      dataset-info (let ((dataset (unwrap! dataset-info err-dataset-not-found))
+                        (price (get price dataset))
+                        (owner (get owner dataset))
+                        (royalty-rate (get royalty-rate dataset))
+                        (platform-fee (calculate-platform-fee price))
+                        (royalty-amount (calculate-royalty price royalty-rate))
+                        (seller-amount (- (- price platform-fee) royalty-amount)))
+
+        ;; Validate dataset is active
+        (asserts! (get active dataset) err-listing-not-active)
+        ;; Prevent buying own dataset
+        (asserts! (not (is-eq tx-sender owner)) err-cannot-buy-own-listing)
+        ;; Check if already purchased
+        (asserts! (is-none (map-get? dataset-purchases {dataset-id: dataset-id, buyer: tx-sender})) err-already-purchased)
+
+        ;; Transfer payments
+        ;; 1. Platform fee to treasury
+        (try! (stx-transfer? platform-fee tx-sender (var-get platform-treasury)))
+        ;; 2. Royalty to original data provider (owner)
+        (try! (stx-transfer? royalty-amount tx-sender owner))
+        ;; 3. Remaining amount to current seller (in this case, same as owner)
+        (try! (stx-transfer? seller-amount tx-sender owner))
+
+        ;; Grant access through dataset registry
+        (try! (contract-call? dataset-registry grant-access dataset-id tx-sender))
+
+        ;; Record purchase
+        (map-set dataset-purchases {dataset-id: dataset-id, buyer: tx-sender} {
+          purchase-price: price,
+          purchased-at: block-height,
+          royalty-paid: royalty-amount
+        })
+
+        ;; Update dataset sales count (would need to be implemented in dataset registry)
+        ;; For now, we'll just return success
+        (ok dataset-id))
+      err-dataset-not-found)))
+
 ;; Admin functions
 
 (define-public (set-platform-fee-rate (new-rate uint))
@@ -230,6 +289,12 @@
   (begin
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
     (var-set platform-treasury new-treasury)
+    (ok true)))
+
+(define-public (set-dataset-registry-contract (new-contract principal))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (var-set dataset-registry-contract new-contract)
     (ok true)))
 
 ;; Read-only functions
@@ -257,6 +322,12 @@
 
 (define-read-only (get-last-sale-id)
   (var-get last-sale-id))
+
+(define-read-only (get-dataset-purchase (dataset-id uint) (buyer principal))
+  (map-get? dataset-purchases {dataset-id: dataset-id, buyer: buyer}))
+
+(define-read-only (get-dataset-registry-contract)
+  (var-get dataset-registry-contract))
 
 ;; NFT trait for marketplace interactions
 (define-trait nft-trait

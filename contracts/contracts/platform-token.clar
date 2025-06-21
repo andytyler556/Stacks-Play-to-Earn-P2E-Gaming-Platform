@@ -11,6 +11,10 @@
 (define-constant err-insufficient-balance (err u102))
 (define-constant err-invalid-amount (err u103))
 (define-constant err-not-authorized (err u104))
+(define-constant err-dataset-not-found (err u105))
+(define-constant err-stake-not-found (err u106))
+(define-constant err-invalid-quality-score (err u107))
+(define-constant err-stake-locked (err u108))
 
 ;; Token metadata
 (define-data-var token-name (string-ascii 32) "P2E Platform Token")
@@ -55,6 +59,29 @@
 
 (define-data-var last-proposal-id uint u0)
 (define-data-var proposal-threshold uint u10000000) ;; 10 tokens to create proposal
+
+;; Data Quality Staking System
+(define-map data-quality-stakes {dataset-id: uint, provider: principal} {
+  staked-amount: uint,
+  stake-start-block: uint,
+  quality-score: uint, ;; 0-100 scale
+  review-count: uint,
+  total-reviews: uint,
+  slashed-amount: uint,
+  locked-until: uint
+})
+
+(define-map quality-reviews {dataset-id: uint, reviewer: principal} {
+  score: uint, ;; 0-100 scale
+  review-date: uint,
+  reviewer-stake: uint,
+  verified: bool
+})
+
+(define-data-var min-quality-stake uint u1000000) ;; 1 token minimum stake
+(define-data-var quality-review-period uint u1440) ;; 24 hours for reviews
+(define-data-var slash-percentage uint u2000) ;; 20% slash for poor quality
+(define-data-var quality-threshold uint u70) ;; 70% minimum quality score
 
 ;; Private functions
 (define-private (is-authorized-minter (minter principal))
@@ -175,6 +202,136 @@
     
     (ok total-rewards)))
 
+;; Data Quality Staking Functions
+
+;; Stake tokens against dataset quality
+(define-public (stake-for-quality (dataset-id uint) (amount uint))
+  (begin
+    (asserts! (> amount u0) err-invalid-amount)
+    (asserts! (>= amount (var-get min-quality-stake)) err-invalid-amount)
+    (asserts! (>= (ft-get-balance platform-token tx-sender) amount) err-insufficient-balance)
+
+    ;; Check if already staked for this dataset
+    (asserts! (is-none (map-get? data-quality-stakes {dataset-id: dataset-id, provider: tx-sender})) err-not-authorized)
+
+    ;; Transfer tokens to contract
+    (try! (ft-transfer? platform-token amount tx-sender (as-contract tx-sender)))
+
+    ;; Create quality stake
+    (map-set data-quality-stakes {dataset-id: dataset-id, provider: tx-sender} {
+      staked-amount: amount,
+      stake-start-block: block-height,
+      quality-score: u100, ;; Start with perfect score
+      review-count: u0,
+      total-reviews: u0,
+      slashed-amount: u0,
+      locked-until: (+ block-height (var-get quality-review-period))
+    })
+
+    (ok true)))
+
+;; Submit quality review for a dataset
+(define-public (submit-quality-review (dataset-id uint) (provider principal) (score uint) (reviewer-stake uint))
+  (let ((stake-data (unwrap! (map-get? data-quality-stakes {dataset-id: dataset-id, provider: provider}) err-stake-not-found)))
+
+    (asserts! (and (>= score u0) (<= score u100)) err-invalid-quality-score)
+    (asserts! (> reviewer-stake u0) err-invalid-amount)
+    (asserts! (>= (ft-get-balance platform-token tx-sender) reviewer-stake) err-insufficient-balance)
+    (asserts! (not (is-eq tx-sender provider)) err-not-authorized) ;; Can't review own dataset
+
+    ;; Check if already reviewed
+    (asserts! (is-none (map-get? quality-reviews {dataset-id: dataset-id, reviewer: tx-sender})) err-not-authorized)
+
+    ;; Transfer reviewer stake
+    (try! (ft-transfer? platform-token reviewer-stake tx-sender (as-contract tx-sender)))
+
+    ;; Record review
+    (map-set quality-reviews {dataset-id: dataset-id, reviewer: tx-sender} {
+      score: score,
+      review-date: block-height,
+      reviewer-stake: reviewer-stake,
+      verified: true
+    })
+
+    ;; Update quality stake with new average score
+    (let ((new-total-reviews (+ (get total-reviews stake-data) u1))
+          (current-total-score (* (get quality-score stake-data) (get review-count stake-data)))
+          (new-total-score (+ current-total-score score))
+          (new-average-score (/ new-total-score new-total-reviews)))
+
+      (map-set data-quality-stakes {dataset-id: dataset-id, provider: provider}
+        (merge stake-data {
+          quality-score: new-average-score,
+          review-count: (+ (get review-count stake-data) u1),
+          total-reviews: new-total-reviews
+        })))
+
+    (ok true)))
+
+;; Slash stake for poor quality (automated or admin triggered)
+(define-public (slash-quality-stake (dataset-id uint) (provider principal))
+  (let ((stake-data (unwrap! (map-get? data-quality-stakes {dataset-id: dataset-id, provider: provider}) err-stake-not-found)))
+
+    ;; Only allow slashing if quality score is below threshold and has enough reviews
+    (asserts! (< (get quality-score stake-data) (var-get quality-threshold)) err-not-authorized)
+    (asserts! (>= (get review-count stake-data) u3) err-not-authorized) ;; Need at least 3 reviews
+
+    ;; Calculate slash amount
+    (let ((slash-amount (/ (* (get staked-amount stake-data) (var-get slash-percentage)) u10000))
+          (remaining-amount (- (get staked-amount stake-data) slash-amount)))
+
+      ;; Update stake data
+      (map-set data-quality-stakes {dataset-id: dataset-id, provider: provider}
+        (merge stake-data {
+          staked-amount: remaining-amount,
+          slashed-amount: (+ (get slashed-amount stake-data) slash-amount),
+          locked-until: (+ block-height u1440) ;; Lock for another 24 hours
+        }))
+
+      ;; Burn slashed tokens (remove from circulation)
+      (try! (as-contract (ft-burn? platform-token slash-amount tx-sender)))
+      (var-set total-supply (- (var-get total-supply) slash-amount))
+
+      (ok slash-amount))))
+
+;; Withdraw quality stake (after review period)
+(define-public (withdraw-quality-stake (dataset-id uint))
+  (let ((stake-data (unwrap! (map-get? data-quality-stakes {dataset-id: dataset-id, provider: tx-sender}) err-stake-not-found)))
+
+    (asserts! (>= block-height (get locked-until stake-data)) err-stake-locked)
+    (asserts! (> (get staked-amount stake-data) u0) err-insufficient-balance)
+
+    ;; Transfer remaining stake back to provider
+    (try! (as-contract (ft-transfer? platform-token (get staked-amount stake-data) tx-sender tx-sender)))
+
+    ;; Remove stake record
+    (map-delete data-quality-stakes {dataset-id: dataset-id, provider: tx-sender})
+
+    (ok (get staked-amount stake-data))))
+
+;; Claim reviewer rewards (for accurate reviews)
+(define-public (claim-reviewer-rewards (dataset-id uint) (provider principal))
+  (let ((review (unwrap! (map-get? quality-reviews {dataset-id: dataset-id, reviewer: tx-sender}) err-not-authorized))
+        (stake-data (unwrap! (map-get? data-quality-stakes {dataset-id: dataset-id, provider: provider}) err-stake-not-found)))
+
+    ;; Only allow claiming if review was accurate (within 10 points of final score)
+    (let ((score-diff (if (> (get score review) (get quality-score stake-data))
+                        (- (get score review) (get quality-score stake-data))
+                        (- (get quality-score stake-data) (get score review)))))
+
+      (asserts! (<= score-diff u10) err-not-authorized) ;; Review must be within 10 points
+
+      ;; Calculate reward (return stake + bonus)
+      (let ((reward-amount (+ (get reviewer-stake review) (/ (get reviewer-stake review) u10)))) ;; 10% bonus
+
+        ;; Transfer reward
+        (try! (as-contract (ft-transfer? platform-token reward-amount tx-sender tx-sender)))
+
+        ;; Remove review record
+        (map-delete quality-reviews {dataset-id: dataset-id, reviewer: tx-sender})
+
+        (ok reward-amount)))))
+
 ;; Governance functions
 
 ;; Create proposal
@@ -236,6 +393,28 @@
     (var-set token-uri new-uri)
     (ok true)))
 
+;; Data Quality Staking admin functions
+
+(define-public (set-min-quality-stake (new-amount uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (var-set min-quality-stake new-amount)
+    (ok true)))
+
+(define-public (set-quality-threshold (new-threshold uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (and (>= new-threshold u0) (<= new-threshold u100)) err-invalid-quality-score)
+    (var-set quality-threshold new-threshold)
+    (ok true)))
+
+(define-public (set-slash-percentage (new-percentage uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (<= new-percentage u5000) err-invalid-amount) ;; Max 50% slash
+    (var-set slash-percentage new-percentage)
+    (ok true)))
+
 ;; SIP-010 Standard Functions
 
 (define-read-only (get-name)
@@ -269,3 +448,27 @@
 
 (define-read-only (get-vote (proposal-id uint) (voter principal))
   (map-get? votes {proposal-id: proposal-id, voter: voter}))
+
+;; Data Quality Staking read-only functions
+
+(define-read-only (get-quality-stake (dataset-id uint) (provider principal))
+  (map-get? data-quality-stakes {dataset-id: dataset-id, provider: provider}))
+
+(define-read-only (get-quality-review (dataset-id uint) (reviewer principal))
+  (map-get? quality-reviews {dataset-id: dataset-id, reviewer: reviewer}))
+
+(define-read-only (get-dataset-quality-score (dataset-id uint) (provider principal))
+  (match (map-get? data-quality-stakes {dataset-id: dataset-id, provider: provider})
+    stake-data (some (get quality-score stake-data))
+    none))
+
+(define-read-only (is-quality-stake-locked (dataset-id uint) (provider principal))
+  (match (map-get? data-quality-stakes {dataset-id: dataset-id, provider: provider})
+    stake-data (> (get locked-until stake-data) block-height)
+    false))
+
+(define-read-only (get-min-quality-stake)
+  (var-get min-quality-stake))
+
+(define-read-only (get-quality-threshold)
+  (var-get quality-threshold))
