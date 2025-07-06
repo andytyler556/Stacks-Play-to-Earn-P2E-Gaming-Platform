@@ -1,13 +1,13 @@
 'use client';
 
-import React from 'react';
-import { 
-  X, 
-  MapPin, 
-  Mountain, 
-  Zap, 
-  Users, 
-  Building, 
+import React, { useState } from 'react';
+import {
+  X,
+  MapPin,
+  Mountain,
+  Zap,
+  Users,
+  Building,
   Star,
   TrendingUp,
   Clock,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { LandPlot } from '@/components/providers/GameProvider';
+import { BuildingConstructor } from './BuildingConstructor';
 
 interface LandDetailsProps {
   land: LandPlot;
@@ -69,10 +70,17 @@ const RARITY_INFO = {
 };
 
 export function LandDetails({ land, onClose }: LandDetailsProps) {
+  const [showConstructor, setShowConstructor] = useState(false);
   const terrainInfo = TERRAIN_INFO[land.terrain as keyof typeof TERRAIN_INFO];
   const rarityInfo = RARITY_INFO[land.rarity as keyof typeof RARITY_INFO];
   const buildingCount = land.buildings?.length || 0;
   const maxBuildings = terrainInfo?.maxBuildings || 10;
+
+  const handleConstruct = (blueprintId: number) => {
+    console.log('Constructing building with blueprint:', blueprintId, 'on land:', land.id);
+    // Here you would integrate with the smart contract
+    setShowConstructor(false);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -227,9 +235,14 @@ export function LandDetails({ land, onClose }: LandDetailsProps) {
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button variant="primary" className="flex-1">
+            <Button
+              variant="primary"
+              className="flex-1"
+              onClick={() => setShowConstructor(true)}
+              disabled={buildingCount >= maxBuildings}
+            >
               <Building className="w-4 h-4 mr-2" />
-              Place Building
+              {buildingCount >= maxBuildings ? 'Land Full' : 'Place Building'}
             </Button>
             <Button variant="outline" className="flex-1">
               <Coins className="w-4 h-4 mr-2" />
@@ -242,6 +255,17 @@ export function LandDetails({ land, onClose }: LandDetailsProps) {
           </div>
         </div>
       </div>
+
+      {/* Building Constructor Modal */}
+      {showConstructor && (
+        <BuildingConstructor
+          landId={land.id}
+          landTerrain={land.terrain}
+          landRarity={land.rarity}
+          onClose={() => setShowConstructor(false)}
+          onConstruct={handleConstruct}
+        />
+      )}
     </div>
   );
 }
