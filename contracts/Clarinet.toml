@@ -44,6 +44,11 @@ path = "contracts/platform-token.clar"
 clarity_version = 2
 epoch = 2.4
 
+[contracts.building-construction]
+path = "contracts/building-construction.clar"
+clarity_version = 2
+epoch = 2.4
+
 # Network configurations
 [network.testnet]
 stacks_node_rpc_address = "https://api.testnet.hiro.so"
