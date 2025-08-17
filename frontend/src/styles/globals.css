@@ -2,17 +2,118 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Digital Oasis Design System */
+:root {
+  /* Primary Backgrounds */
+  --bg-primary: #F5F5F5;
+  --bg-secondary: #FAFAFA;
+
+  /* Nature/Resource Elements */
+  --nature-primary: #4CAF50;
+  --nature-light: #8BC34A;
+  --nature-earth: #795548;
+
+  /* Tech/UI Elements */
+  --tech-primary: #2196F3;
+  --tech-accent: #673AB7;
+  --tech-light: #03A9F4;
+
+  /* Action/Alert Colors */
+  --action-primary: #FF9800;
+  --alert-primary: #E91E63;
+
+  /* Text Colors */
+  --text-primary: #212121;
+  --text-secondary: #757575;
+}
+
+/* Custom utility classes for the game interface */
+@layer utilities {
+  .bg-digital-oasis {
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+  }
+
+  .text-nature {
+    color: var(--nature-primary);
+  }
+
+  .text-tech {
+    color: var(--tech-primary);
+  }
+
+  .text-action {
+    color: var(--action-primary);
+  }
+
+  .border-nature {
+    border-color: var(--nature-primary);
+  }
+
+  .border-tech {
+    border-color: var(--tech-primary);
+  }
+
+  .bg-nature {
+    background-color: var(--nature-primary);
+  }
+
+  .bg-tech {
+    background-color: var(--tech-primary);
+  }
+
+  .bg-action {
+    background-color: var(--action-primary);
+  }
+
+  .shadow-game {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  .shadow-game-lg {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+}
+
+/* Game-specific animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.6);
+  }
+}
+
+@keyframes resource-flow {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-20px) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-resource-flow {
+  animation: resource-flow 1.5s ease-out forwards;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @layer base {
   html {
     font-family: 'Inter', system-ui, sans-serif;
   }
-  
+
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
   }
-  
+
   * {
     @apply border-gray-200;
   }
@@ -23,130 +124,130 @@
   .btn {
     @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
   }
-  
+
   .btn-primary {
     @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
   }
-  
+
   .btn-secondary {
     @apply btn bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500;
   }
-  
+
   .btn-success {
     @apply btn bg-secondary-600 text-white hover:bg-secondary-700 focus:ring-secondary-500;
   }
-  
+
   .btn-warning {
     @apply btn bg-accent-500 text-white hover:bg-accent-600 focus:ring-accent-400;
   }
-  
+
   .btn-outline {
     @apply btn border-gray-300 text-gray-700 bg-white hover:bg-gray-50 focus:ring-primary-500;
   }
-  
+
   .btn-lg {
     @apply px-6 py-3 text-base;
   }
-  
+
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
   }
-  
+
   /* Card Components */
   .card {
     @apply bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden;
   }
-  
+
   .card-hover {
     @apply card transition-all duration-200 hover:shadow-md hover:border-gray-300;
   }
-  
+
   .card-game {
     @apply card-hover bg-gradient-to-br from-white to-gray-50;
   }
-  
+
   .card-nft {
     @apply card-hover shadow-nft hover:shadow-game-hover transform hover:-translate-y-1;
   }
-  
+
   /* Input Components */
   .input {
     @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm;
   }
-  
+
   .input-error {
     @apply input border-red-300 text-red-900 placeholder-red-300 focus:ring-red-500 focus:border-red-500;
   }
-  
+
   /* Badge Components */
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
-  
+
   .badge-common {
     @apply badge bg-gray-100 text-gray-800;
   }
-  
+
   .badge-uncommon {
     @apply badge bg-green-100 text-green-800;
   }
-  
+
   .badge-rare {
     @apply badge bg-blue-100 text-blue-800;
   }
-  
+
   .badge-epic {
     @apply badge bg-purple-100 text-purple-800;
   }
-  
+
   .badge-legendary {
     @apply badge bg-yellow-100 text-yellow-800;
   }
-  
+
   /* Loading Components */
   .spinner {
     @apply animate-spin rounded-full border-2 border-gray-300 border-t-primary-600;
   }
-  
+
   .spinner-sm {
     @apply spinner h-4 w-4;
   }
-  
+
   .spinner-md {
     @apply spinner h-6 w-6;
   }
-  
+
   .spinner-lg {
     @apply spinner h-8 w-8;
   }
-  
+
   /* Game-specific styles */
   .land-plot {
     @apply relative bg-game-land rounded-lg border-2 border-game-land/20 overflow-hidden cursor-pointer transition-all duration-200 hover:border-game-land/40 hover:shadow-lg;
   }
-  
+
   .building-slot {
     @apply relative bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center transition-all duration-200 hover:border-gray-400 hover:bg-gray-50;
   }
-  
+
   .building-placed {
     @apply building-slot bg-game-building border-solid border-game-building/20;
   }
-  
+
   /* Utility classes */
   .text-gradient {
     @apply bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent;
   }
-  
+
   .glass {
     @apply bg-white/80 backdrop-blur-sm border border-white/20;
   }
-  
+
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -156,11 +257,11 @@
   .animation-delay-200 {
     animation-delay: 200ms;
   }
-  
+
   .animation-delay-400 {
     animation-delay: 400ms;
   }
-  
+
   .animation-delay-600 {
     animation-delay: 600ms;
   }

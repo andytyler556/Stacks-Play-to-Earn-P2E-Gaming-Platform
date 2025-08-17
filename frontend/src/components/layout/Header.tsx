@@ -3,16 +3,21 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  Menu, 
-  X, 
-  Wallet, 
-  LogOut, 
-  User, 
+import {
+  Menu,
+  X,
+  Wallet,
+  LogOut,
+  User,
   Coins,
   MapPin,
   Trophy,
-  ShoppingBag
+  ShoppingBag,
+  Home,
+  Package,
+  Calendar,
+  Crown,
+  Gamepad2
 } from 'lucide-react';
 import { useWallet } from '@/components/providers/WalletProvider';
 import { useGameView } from '@/components/providers/GameProvider';
@@ -22,20 +27,20 @@ import { Button } from '@/components/ui/Button';
 import clsx from 'clsx';
 
 const navigation = [
-  { name: 'World', href: '/', icon: MapPin, view: 'world' as const },
-  { name: 'Inventory', href: '/inventory', icon: User, view: 'inventory' as const },
-  { name: 'Marketplace', href: '/marketplace', icon: ShoppingBag, view: 'marketplace' as const },
-  { name: 'Competitions', href: '/competitions', icon: Trophy, view: 'competitions' as const },
+  { name: 'Dashboard', href: '/dashboard', icon: Home, description: 'Player hub and overview' },
+  { name: 'Land', href: '/land', icon: MapPin, description: 'Manage your land plots' },
+  { name: 'Blueprints', href: '/blueprints', icon: Package, description: 'Building blueprints' },
+  { name: 'Marketplace', href: '/marketplace', icon: ShoppingBag, description: 'Trade NFTs and assets' },
+  { name: 'Events', href: '/events', icon: Calendar, description: 'Community competitions' },
+  { name: 'Premium', href: '/premium', icon: Crown, description: 'Premium features' },
 ];
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
   const { isConnected, address, stxBalance, tokenBalance, disconnect } = useWallet();
-  const { setView } = useGameView();
 
-  const handleNavClick = (view: 'world' | 'inventory' | 'marketplace' | 'competitions') => {
-    setView(view);
+  const handleNavClick = () => {
     setMobileMenuOpen(false);
   };
 
@@ -45,11 +50,14 @@ export function Header() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-lg flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-white" />
+            <Link href="/dashboard" className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
+                <Gamepad2 className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold text-gradient">P2E Platform</span>
+              <div className="hidden sm:block">
+                <div className="text-xl font-bold text-gray-900">Virtual Lands</div>
+                <div className="text-xs text-gray-500">Building Simulation</div>
+              </div>
             </Link>
           </div>
 
@@ -58,18 +66,19 @@ export function Header() {
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
-              
+
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  onClick={() => handleNavClick(item.view)}
+                  onClick={handleNavClick}
                   className={clsx(
                     'inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
                     isActive
-                      ? 'text-primary-600 bg-primary-50'
+                      ? 'text-tech bg-blue-50 border border-blue-200'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   )}
+                  title={item.description}
                 >
                   <Icon className="w-4 h-4 mr-2" />
                   {item.name}
@@ -104,7 +113,7 @@ export function Header() {
                     <Wallet className="w-4 h-4" />
                     <span className="hidden sm:inline">{shortenAddress(address!)}</span>
                   </Button>
-                  
+
                   {/* Dropdown Menu */}
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div className="py-1">
@@ -155,25 +164,28 @@ export function Header() {
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
-              
+
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  onClick={() => handleNavClick(item.view)}
+                  onClick={handleNavClick}
                   className={clsx(
                     'flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors',
                     isActive
-                      ? 'text-primary-600 bg-primary-50'
+                      ? 'text-tech bg-blue-50 border border-blue-200'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   )}
                 >
                   <Icon className="w-5 h-5 mr-3" />
-                  {item.name}
+                  <div>
+                    <div>{item.name}</div>
+                    <div className="text-xs text-gray-500">{item.description}</div>
+                  </div>
                 </Link>
               );
             })}
-            
+
             {/* Mobile Wallet Info */}
             {isConnected && (
               <div className="px-3 py-2 border-t border-gray-200 mt-2">
